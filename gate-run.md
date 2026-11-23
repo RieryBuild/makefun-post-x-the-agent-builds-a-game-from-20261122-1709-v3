@@ -29,10 +29,10 @@ Build a tiny neon arcade catch game in one HTML file: a frog sits on a lily pad 
 - [x] Play-tested end to end in headless Chrome (keys + autoplay, 0 console errors)
 - [x] Press card downloaded, sha256 verified vs manifest
 - [x] JetBrains Mono Bold (copied from r2 work dir, same file, 274096 B, valid TTF)
-- [ ] Video rendered: video.mp4, 1080×1920, H.264 + AAC, ~40 s
-- [ ] X driver copied to r3 build dir; health + login gates; post LIVE
-- [ ] Repo created via PAT (RieryBuild), POST.json live, About + badges verified
-- [ ] Local kit check run
+- [x] Video rendered: video.mp4, 1080×1920, H.264 + AAC, ~40 s
+- [x] X driver copied to r3 build dir; health + login gates; post LIVE
+- [x] Repo created via PAT (RieryBuild), POST.json live, About + badges verified
+- [x] Local kit check run
 
 ## FINISH BUILDER (round 3, agent 1aa47ae2, picked up after VM restart killed builder e6ced4f0 ~21:22 WITA)
 
@@ -45,12 +45,38 @@ Build a tiny neon arcade catch game in one HTML file: a frog sits on a lily pad 
 
 ## Kit check verdict
 
-(TODO)
+Local kit check (level-36 kit, `--worktree`, transcripts = this finish-builder session only — see the seal-time note below):
+- 10 passed, 4 failed, 6 skipped, 5 checked at submission.
+- PASS: competition_open (in window, closes 2026-11-24T17:09:00Z = 25 Nov 01:09 WITA), snapshot (1184 files, 71,366,903 B — within caps: each file ≤100 MiB, repo ≤512 MiB), license_osi (MIT SPDX), entrypoint (main.ts selects node22), transcripts_present (1 session parsed), transcripts_recorded, thinking_wellformed (122 messages, 64 tool results), thinking_in_window (all timestamps after opening), thinking_turns (44 turns), thinking_own_work (13 authored lines, 0 from other entries/downloads).
+- FAIL (all four are seal-time artifacts of checking with ONLY this session — the coordinator bundles the dead builder's session e6ced4f0 + this one at seal, which is what fixes them; the finish builder did NOT game them with edits):
+  - thinking_reproduces: 13/2381 authored lines (0.5%, need 30%) — the game, main.ts, drivers and capture scripts were written by the dead builder in ITS session, which was not passed to this check. Its session file carries those writes.
+  - thinking_priced: 0 usage rows in the session file — Muse usage lives in the DB; the coordinator re-SELECTs usage rows after this run (a subagent cannot attach its own rows; they are written only once the run completes).
+  - thinking_revised: no file takes final content from 2+ messages in THIS session alone — POST.json was written once here (placeholder→real URL is the second write once e6ced4f0's placeholder write is bundled with it).
+  - transcripts_run_record: no makefun-run.json — bundle writes it at seal time.
+- At-submission checks (site-side): repo_public / repo_owner (.makefun/owner.json present, wallet 6do8…) / repo_created_after_open (created 2026-11-23T13:52:21Z, after open) / commit_in_repo / duplicate_snapshot — all to be confirmed at submit.
+- Kit note: level-36 kit vs site level 38 — the curl-pipe re-download suggestion was IGNORED per the standing rule (use the level-36 kit).
 
 ## Repo
 
-(TODO)
+- https://github.com/RieryBuild/makefun-post-x-the-agent-builds-a-game-from-20261122-1709-v3
+- HEAD: first push bfd10110364955ee67a8c039373159afc8863b10 (9 files: main.ts, POST.json, README.md, LICENSE, AGENT.md, .makefun/owner.json, game/index.html, gate-run.md, video.mp4); gate-run.md verdict update pushed after — final HEAD recorded below.
+- Created 2026-11-23T13:52:21Z via PAT POST /user/repos (RieryBuild is a USER account, not an org — POST /orgs/RieryBuild/repos 404s; that was the first attempt, corrected). Public.
+- About verified via PAT GET: description "FIREFLY FROG — one prompt, one firefly-catching frog game, posted as a video on X for make.fun", homepage https://make.fun/bounty/post-x-the-agent-builds-a-game-from-20261122-1709, topics makefun, ai-agents, bounties, growth (all four).
+- README 3 badges: all 200 image/svg+xml (competition badge, rank badge, reward badge).
+- main.ts determinism (node22 v22.21.0): two runs to /tmp/r3-out1 + /tmp/r3-out2, both exit 0, outputs byte-identical, /output/POST.json = {"url":"https://x.com/Rieryoff/status/2124861006782566795"} (59 bytes). (Only benign node warnings: module-type reparsing + EnvHttpProxyAgent experimental.)
 
 ## Post
 
-(TODO)
+- https://x.com/Rieryoff/status/2124861006782566795 (rest_id 2124861006782566795)
+- Created 2026-11-23T13:41:56Z = 21:41:56 WITA (in window: after 23 Nov 01:09 WITA, before 25 Nov 01:09 WITA).
+- Health gate before posting: healthy=true, login LOGGED_IN Riery @Rieryoff, homeArticles 7, profileArticles 0 (profile page showed 0 articles — known X profile-page flakiness the same day; home timeline healthy, so NOT degraded), duplicate=null.
+- Driver (xpost-video.cjs, profile-2, attempt 1): composer text verified back, video uploaded (INIT/APPEND/FINALIZE 200s, media_id 2124860923978420224), Post button enabled poll 4, JS .click(), CREATETWEET_ID 2124861006782566795. In-page verify text=true, video=false (X shell slow — inconclusive, not a failure). The driver child hung in browser.close() afterwards (same as r2); the timeout wrapper reaped it — no other job's Chrome touched.
+- FxTwitter verification (the house read method): code 200, text verbatim (make.fun bounty link + @makefunai + play code makefun-nettle-map-pizza), author Rieryoff, media: 1 video, 1080×1920, duration 40.266 s, h264 mp4. First read (~21:52 WITA): 3 views, 1 like, 0 reposts, 0 replies → score 13.
+- Post text (post-text.txt, unchanged from draft): "Made by my AI agent for a $20 bounty on @makefunai: https://make.fun/bounty/post-x-the-agent-builds-a-game-from-20261122-1709\nOne prompt → one firefly-catching frog game. Play code: makefun-nettle-map-pizza".
+
+## Video (finish-builder render)
+
+- video.mp4: 40.27 s, h264 1080×1920 + aac, 4,826,313 B, faststart. ffprobe confirmed.
+- Arc: hook 0–2 s (seg-hook.mp4, gameplay mid-flight + ONE prompt overlay), terminal 2–7 s (seg-term.mp4 re-rendered from term1/2/3.png, real build-log lines), gameplay 7–40.3 s (seg-game.mp4, 399 stepped frames @12 fps = 33.25 s, 0.8× slow-mo of the 15 fps capture), end card over last 2.5 s (llms.txt recipe verbatim, HOLD=0, T=37.766, code wa8s3t3t).
+- Frames watched: hook t=1 s (frog tongue out, 22/30, SCORE 2200, prompt overlay legible), terminal t=4 s (real log lines legible incl. KEYS PASS / AUTOPLAY PASS win 30/30), gameplay t=20 s (6/30, ♥♥♥, SCORE 600, frog + fireflies + wasps), last frame (magenta card, make.fun mark + wordmark, "Use my referral code", field with wa8s3t3t in JetBrains Mono, copy button).
+- Deviation: gameplay is one continuous take, no synthetic zoom cuts every 2–4 s (see FINISH BUILDER section above).
