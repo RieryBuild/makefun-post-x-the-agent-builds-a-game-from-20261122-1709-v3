@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FIREFLY FROG — one prompt, one game</title>
+<style>
+  html,body{margin:0;padding:0;background:#04140a;overflow:hidden}
+  canvas{display:block;width:1080px;height:1920px}
+</style>
+</head>
+<body>
+<canvas id="game" width="1080" height="1920"></canvas>
+<script>
+'use strict';
+// FIREFLY FROG — built from ONE prompt:
+// "a frog on a lily pad catches fireflies with its tongue, dodges wasps, 3 lives, win at 30"
+const W = 1080, H = 1920;
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+
+const FROG_Y = 1640;          // frog sits on the lily pad
+const TONGUE_MAX = 780;       // tongue reach (px)
+const WIN_CAUGHT = 30;
+
+const G = {
+  state: 'title',             // title | playing | win | lose
+  caught: 0,
+  lives: 3,
+  score: 0,
+  frogX: W / 2,
+  frogTarget: W / 2,
+  keys: {},
+  fireflies: [],              // {x,y,vy,phase,r}
+  wasps: [],                  // {x,y,vy,phase,r}
+  spawnF: 0, spawnW: 0,
+  tongue: { active: false, len: 0, phase: 'idle', t: 0 }, // out | hold | back
+  invuln: 0,                  // seconds of post-sting invulnerability
+  flashes: [],                // catch sparkles {x,y,t}
+  time: 0,
+  flicks: 0,
+  stings: 0,
+};
+window.__game = G;
+Object.defineProperty(window.__game, 'speed', { get: () => 1 + G.caught * 0.03 });
+
+function speed() { return 1 + G.caught * 0.03; } // difficulty ramps with score
+
+function spawnFirefly(y) {
+  G.fireflies.push({
+    x: 60 + Math.random() * (W - 120),
+    y: (y === undefined ? -30 : y),
+    vy: (55 + Math.random() * 45) * speed(),
+    phase: Math.random() * Math.PI * 2,
+    r: 13 + Math.random() * 5,
+  });
+}
+function spawnWasp() {
+  G.wasps.push({
+    x: 60 + Math.random() * (W - 120),
+    y: -30,
+    vy: (110 + Math.random() * 50) * speed(),
+    phase: Math.random() * Math.PI * 2,
+    r: 22,
+  });
+}
+
+function flickTongue() {
+  if (G.state !== 'playing' || G.tongue.active) return;
+  G.tongue.active = true; G.tongue.phase = 'out'; G.tongue.t = 0; G.tongue.len = 0;
+  G.flicks++;
+}
+
+function loseLife(x, y) {
+  if (G.invuln > 0 || G.state !== 'playing') return;
+  G.lives--;
+  G.stings++;
+  G.invuln = 1.5;
+  G.flashes.push({ x, y, t: 0, color: '#ff3355' });
+  if (G.lives <= 0) { G.state = 'lose'; }
+}
+
+function startGame() {
+  G.state = 'playing';
+  G.caught = 0; G.lives = 3; G.score = 0;
+  G.fireflies = []; G.wasps = [];
+  G.spawnF = 0; G.spawnW = 0;
+  G.tongue.active = false; G.tongue.len = 0;
+  G.invuln = 0; G.flicks = 0; G.stings = 0;
+  for (let i = 0; i < 6; i++) spawnFirefly(250 + i * 170 + Math.random() * 60); // pre-seeded mid-air: action from second 1
+}
+
+function tongueTip() { return { x: G.frogX, y: FROG_Y - 40 - G.tongue.len }; }
+
+function update(dt) {
+  G.time += dt;
+  if (G.invuln > 0) G.invuln -= dt;
+  for (const f of G.flashes) f.t += dt;
+  G.flashes = G.flashes.filter((f) => f.t < 0.5);
+  if (G.state !== 'playing') return;
+
+  // frog movement: keys or mouse target
+  const spd = 720 * dt;
+  if (G.keys['ArrowLeft'] || G.keys['a']) G.frogTarget -= spd;
+  if (G.keys['ArrowRight'] || G.keys['d']) G.frogTarget += spd;
+  G.frogTarget = Math.max(90, Math.min(W - 90, G.frogTarget));
+  G.frogX += (G.frogTarget - G.frogX) * Math.min(1, dt * 14);
+  if (Math.abs(G.frogTarget - G.frogX) < 1) G.frogX = G.frogTarget;
+
+  // tongue animation: out (fast) -> hold -> back
+  const T = G.tongue;
+  if (T.active) {
+    T.t += dt;
+    if (T.phase === 'out') {
+      T.len = Math.min(TONGUE_MAX, T.t / 0.12 * TONGUE_MAX);
+      if (T.len >= TONGUE_MAX) { T.phase = 'hold'; T.t = 0; }
+    } else if (T.phase === 'hold') {
+      if (T.t > 0.08) { T.phase = 'back'; T.t = 0; }
+    } else {
+      T.len = Math.max(0, TONGUE_MAX - T.t / 0.12 * TONGUE_MAX);
+      if (T.len <= 0) { T.active = false; T.phase = 'idle'; }
+    }
+  }
+
+  // tongue catches: anything within 46 px of the tongue line, above the frog
+  if (T.active && T.len > 60) {
+    const tipY = FROG_Y - 40 - T.len;
+    for (let i = G.fireflies.length - 1; i >= 0; i--) {
+      const f = G.fireflies[i];
+      if (Math.abs(f.x - G.frogX) < 46 && f.y > tipY - 10 && f.y < FROG_Y - 30) {
+        G.fireflies.splice(i, 1);
+        G.caught++; G.score += 100;
+        G.flashes.push({ x: f.x, y: f.y, t: 0, color: '#ffd94a' });
+        if (G.caught >= WIN_CAUGHT) { G.state = 'win'; }
+      }
+    }
+    for (let i = G.wasps.length - 1; i >= 0; i--) {
+      const w = G.wasps[i];
+      if (Math.abs(w.x - G.frogX) < 52 && w.y > tipY - 10 && w.y < FROG_Y - 30) {
+        G.wasps.splice(i, 1);
+        loseLife(w.x, w.y);
+      }
+    }
+  }
+
+  // spawn + drift
+  G.spawnF -= dt;
+  if (G.spawnF <= 0) { spawnFirefly(); G.spawnF = Math.max(0.35, 0.9 - G.caught * 0.012); }
+  G.spawnW -= dt;
+  if (G.spawnW <= 0 && G.caught >= 5 && G.wasps.length < 3) { spawnWasp(); G.spawnW = Math.max(1.6, 3.2 - G.caught * 0.03); }
+
+  for (let i = G.fireflies.length - 1; i >= 0; i--) {
+    const f = G.fireflies[i];
+    f.y += f.vy * dt;
+    f.x += Math.sin(G.time * 2 + f.phase) * 55 * dt;
+    if (f.y > H - 60) G.fireflies.splice(i, 1); // missed — drifts into the reeds
+  }
+  for (let i = G.wasps.length - 1; i >= 0; i--) {
+    const w = G.wasps[i];
+    w.y += w.vy * dt;
+    w.x += Math.sin(G.time * 3 + w.phase) * 90 * dt;
+    if (w.y > H - 60) { G.wasps.splice(i, 1); continue; }
+    // wasp reaches the frog
+    if (Math.abs(w.x - G.frogX) < 70 && w.y > FROG_Y - 70 && w.y < FROG_Y + 60) {
+      G.wasps.splice(i, 1);
+      loseLife(w.x, w.y);
+    }
+  }
+}
+
+// ---------- drawing ----------
+// Pre-rendered sprites (cheap drawImage beats a fresh radial gradient per dot per frame)
+const glowSprite = document.createElement('canvas');
+glowSprite.width = 128; glowSprite.height = 128;
+{
+  const g2 = glowSprite.getContext('2d');
+  const g = g2.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, '#ffd94a');
+  g.addColorStop(0.35, 'rgba(255,217,74,0.8)');
+  g.addColorStop(1, 'rgba(255,217,74,0)');
+  g2.fillStyle = g;
+  g2.fillRect(0, 0, 128, 128);
+  g2.fillStyle = '#fff8d0';
+  g2.beginPath(); g2.arc(64, 64, 9, 0, Math.PI * 2); g2.fill();
+}
+const bgGrad = (() => {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#020a06');
+  g.addColorStop(0.55, '#04140a');
+  g.addColorStop(1, '#062015');
+  return g;
+})();
+
+function glowDot(x, y, r, color) {
+  const s = r * 6.4;
+  ctx.drawImage(glowSprite, x - s / 2, y - s / 2, s, s);
+}
+
+function drawBackground() {
+  ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+  // moon
+  ctx.fillStyle = '#e8f5d8';
+  ctx.beginPath(); ctx.arc(880, 170, 62, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#cfe8a8';
+  ctx.beginPath(); ctx.arc(860, 155, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(895, 185, 9, 0, Math.PI * 2); ctx.fill();
+  // stars
+  ctx.fillStyle = '#bfe8a0';
+  for (let i = 0; i < 40; i++) {
+    const sx = (i * 173) % W, sy = (i * 97) % 700;
+    ctx.globalAlpha = 0.25 + ((i * 37) % 50) / 100;
+    ctx.fillRect(sx, sy, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+  // distant reeds
+  ctx.strokeStyle = '#0d3a1e'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    const rx = 40 + i * 125, rh = 150 + ((i * 61) % 120);
+    ctx.beginPath(); ctx.moveTo(rx, H); ctx.lineTo(rx + 18, H - rh); ctx.stroke();
+  }
+  // pond surface line
+  ctx.strokeStyle = '#1d5c33'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(0, 1560); ctx.lineTo(W, 1560); ctx.stroke();
+  // lily pads
+  const pads = [[180, 1750, 150], [880, 1790, 170], [540, 1850, 210], [90, 1880, 120]];
+  for (const [px, py, pr] of pads) {
+    ctx.fillStyle = '#0f5c2a';
+    ctx.beginPath(); ctx.ellipse(px, py, pr, pr * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#177a38';
+    ctx.beginPath(); ctx.ellipse(px - 12, py - 6, pr * 0.85, pr * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // pink lotus on the frog's pad
+  ctx.fillStyle = '#ff6fae';
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    ctx.beginPath(); ctx.ellipse(700 + Math.cos(a) * 26, 1810 + Math.sin(a) * 10, 22, 10, a, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#ffd94a';
+  ctx.beginPath(); ctx.arc(700, 1810, 10, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawFrog() {
+  const x = G.frogX, blink = (G.invuln > 0 && Math.floor(G.time * 10) % 2 === 0);
+  if (blink) ctx.globalAlpha = 0.35;
+  // tongue (under the head so it reads as coming from the mouth)
+  if (G.tongue.active && G.tongue.len > 10) {
+    const tip = tongueTip();
+    ctx.strokeStyle = '#ff7d9c'; ctx.lineWidth = 16; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, FROG_Y - 40); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    ctx.fillStyle = '#ff4d6d';
+    ctx.beginPath(); ctx.arc(tip.x, tip.y, 14, 0, Math.PI * 2); ctx.fill();
+  }
+  // body
+  ctx.fillStyle = '#39d353';
+  ctx.beginPath(); ctx.ellipse(x, FROG_Y, 105, 78, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2fbf47';
+  ctx.beginPath(); ctx.ellipse(x, FROG_Y + 34, 88, 46, 0, 0, Math.PI * 2); ctx.fill();
+  // belly
+  ctx.fillStyle = '#d8f7c0';
+  ctx.beginPath(); ctx.ellipse(x, FROG_Y + 22, 62, 42, 0, 0, Math.PI * 2); ctx.fill();
+  // feet
+  ctx.fillStyle = '#2fbf47';
+  ctx.beginPath(); ctx.ellipse(x - 95, FROG_Y + 52, 42, 18, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + 95, FROG_Y + 52, 42, 18, 0.3, 0, Math.PI * 2); ctx.fill();
+  // eyes
+  for (const ex of [x - 48, x + 48]) {
+    ctx.fillStyle = '#39d353';
+    ctx.beginPath(); ctx.arc(ex, FROG_Y - 72, 34, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ex, FROG_Y - 76, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0a1f0d';
+    ctx.beginPath(); ctx.arc(ex, FROG_Y - 76, 11, 0, Math.PI * 2); ctx.fill();
+  }
+  // smile
+  ctx.strokeStyle = '#0a1f0d'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(x, FROG_Y - 52, 42, 0.25 * Math.PI, 0.75 * Math.PI); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  ctx.fillStyle = 'rgba(2,12,6,0.55)';
+  ctx.fillRect(0, 0, W, 150);
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 54px "DejaVu Sans", sans-serif';
+  ctx.fillStyle = '#ffd94a';
+  ctx.fillText('✦ ' + G.caught + '/' + WIN_CAUGHT, 40, 78);
+  ctx.fillStyle = '#ff5c7a';
+  let hearts = '';
+  for (let i = 0; i < 3; i++) hearts += (i < G.lives ? '♥' : '♡');
+  ctx.fillText(hearts, 470, 78);
+  ctx.fillStyle = '#eafcff';
+  ctx.font = 'bold 44px "DejaVu Sans", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('SCORE ' + G.score, 1040, 78);
+  ctx.textAlign = 'left';
+}
+
+function drawCenter(text, sub, color) {
+  ctx.fillStyle = 'rgba(2,12,6,0.72)';
+  ctx.fillRect(0, 640, W, 560);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.font = 'bold 120px "DejaVu Sans", sans-serif';
+  ctx.fillText(text, W / 2, 830);
+  ctx.fillStyle = '#eafcff';
+  ctx.font = '44px "DejaVu Sans", sans-serif';
+  const lines = sub.split('\n');
+  lines.forEach((ln, i) => ctx.fillText(ln, W / 2, 960 + i * 62));
+  ctx.textAlign = 'left';
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  // fireflies
+  for (const f of G.fireflies) {
+    const pulse = 0.75 + 0.25 * Math.sin(G.time * 5 + f.phase);
+    ctx.globalAlpha = pulse;
+    glowDot(f.x, f.y, f.r, '#ffd94a');
+    ctx.globalAlpha = 1;
+  }
+  // wasps
+  for (const w of G.wasps) {
+    ctx.fillStyle = '#ff3355';
+    ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a0505';
+    ctx.fillRect(w.x - w.r, w.y - 5, w.r * 2, 5);
+    ctx.fillRect(w.x - w.r, w.y + 6, w.r * 2, 5);
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(w.x - 8, w.y - w.r - 6, 12, Math.PI, 0); ctx.stroke();
+    ctx.beginPath(); ctx.arc(w.x + 8, w.y - w.r - 6, 12, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(w.x - 7, w.y - 4, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w.x + 7, w.y - 4, 4, 0, Math.PI * 2); ctx.fill();
+  }
+  // catch sparkles
+  for (const f of G.flashes) {
+    ctx.globalAlpha = 1 - f.t / 0.5;
+    ctx.fillStyle = f.color;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 10 + f.t * 90, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  drawFrog();
+  drawHUD();
+  if (G.state === 'title') {
+    drawCenter('FIREFLY FROG', 'One prompt → one game\n← → move · SPACE / tap = tongue\nCatch 30 fireflies · dodge the wasps', '#7dff5e');
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd94a';
+    ctx.font = 'bold 48px "DejaVu Sans", sans-serif';
+    ctx.fillText('— press ENTER to start —', W / 2, 1330);
+    ctx.textAlign = 'left';
+  } else if (G.state === 'win') {
+    drawCenter('YOU WIN!', '30 fireflies caught · score ' + G.score + '\npress R to play again', '#ffd94a');
+  } else if (G.state === 'lose') {
+    drawCenter('GAME OVER', 'the wasps got you · ' + G.caught + ' fireflies · score ' + G.score + '\npress R to play again', '#ff5c7a');
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (!window.__paused) { update(dt); draw(); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+// Deterministic step hook (for frame-by-frame video capture under host load):
+// pause rAF updates, then advance the game by fixed dt steps from the driver.
+window.__step = function (dt) { update(dt); draw(); };
+window.__startGame = startGame;
+window.__paused = false;
+
+// ---------- input ----------
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    if (G.state === 'title') startGame();
+    return;
+  }
+  if (e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    if (G.state === 'title') startGame();
+    else if (G.state === 'playing') flickTongue();
+    return;
+  }
+  if (e.key === 'r' || e.key === 'R') {
+    if (G.state === 'win' || G.state === 'lose') startGame();
+    return;
+  }
+  // Nudge on every key press as well as held-key movement, so quick taps
+  // still move the frog (a bare keydown+keyup can fall between rAF frames).
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') G.frogTarget = Math.max(90, G.frogTarget - 48);
+  if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') G.frogTarget = Math.min(W - 90, G.frogTarget + 48);
+  G.keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true;
+});
+window.addEventListener('keyup', (e) => {
+  G.keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false;
+});
+cv.addEventListener('mousemove', (e) => {
+  const r = cv.getBoundingClientRect();
+  G.frogTarget = ((e.clientX - r.left) / r.width) * W;
+});
+cv.addEventListener('mousedown', (e) => {
+  if (G.state === 'title') { startGame(); return; }
+  if (G.state === 'win' || G.state === 'lose') { startGame(); return; }
+  flickTongue();
+});
+</script>
+</body>
+</html>
