@@ -59,7 +59,7 @@ Local kit check (level-36 kit, `--worktree`, transcripts = this finish-builder s
 ## Repo
 
 - https://github.com/RieryBuild/makefun-post-x-the-agent-builds-a-game-from-20261122-1709-v3
-- HEAD: first push bfd10110364955ee67a8c039373159afc8863b10 (9 files: main.ts, POST.json, README.md, LICENSE, AGENT.md, .makefun/owner.json, game/index.html, gate-run.md, video.mp4); gate-run.md verdict update pushed after — final HEAD recorded below.
+- HEAD: first push bfd10110364955ee67a8c039373159afc8863b10 (9 files); final HEAD 31d152f469aec0f8c726d4502f3a5994c4db7d1a (gate-run.md verdict update).
 - Created 2026-11-23T13:52:21Z via PAT POST /user/repos (RieryBuild is a USER account, not an org — POST /orgs/RieryBuild/repos 404s; that was the first attempt, corrected). Public.
 - About verified via PAT GET: description "FIREFLY FROG — one prompt, one firefly-catching frog game, posted as a video on X for make.fun", homepage https://make.fun/bounty/post-x-the-agent-builds-a-game-from-20261122-1709, topics makefun, ai-agents, bounties, growth (all four).
 - README 3 badges: all 200 image/svg+xml (competition badge, rank badge, reward badge).
